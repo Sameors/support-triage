@@ -1,3 +1,8 @@
 # Add dependencies as they're actually used — don't pre-guess the full list.
 # Likely candidates based on DESIGN.md: anthropic, chromadb, sentence-transformers,
 # pdfplumber (reused from the Document Q&A RAG project's src/).
+pytest
+python-dotenv
+chromadb
+sentence-transformers
+anthropic
