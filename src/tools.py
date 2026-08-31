@@ -25,13 +25,18 @@ if DOCUMENT_QA_APP_SRC:
 from src.retrieval import query_chunks
 from src.generation import generate_answer
 
+VALID_CATEGORIES = {"billing", "legal", "refund", "technical", "account", "general"}
+VALID_URGENCIES = {"low", "medium", "high", "critical"}
+VALID_QUEUE = {"billing", "technical", "account", "general"}
+VALID_CONFIDENCE_LEVELS = {"low", "medium", "high"}
+SIMILARITY_THRESHOLD = 0.5
+
 def classify_case(category: str, urgency: str) -> dict[str, Any]:
     """
     Receives the category/urgency the model has already determined by reasoning
     over the ticket text. 
     """
-    VALID_CATEGORIES = {"billing", "legal", "refund", "technical", "account", "general"}
-    VALID_URGENCIES = {"low", "medium", "high", "critical"}
+   
     
     if category not in VALID_CATEGORIES:
         raise ValueError(f"invalid category: '{category}'")
@@ -67,7 +72,7 @@ def route_to_queue(queue: str, reason: str) -> dict[str, Any]:
     """
     Routes the ticket to the suggested queue. 
     """
-    VALID_QUEUE = {"billing", "technical", "account", "general"}
+    
     
     if queue not in VALID_QUEUE:
         raise ValueError(f"invalid queue: '{queue}'")
@@ -189,6 +194,79 @@ def check_layer_1_hard_rules(category: str, urgency: str) -> dict[str, Any]:
         "resolve": resolve,
         "reason" : reason
             }
-       
     
+def check_layer_2_retrieval_confidence(top_similarity: float, threshold: float) -> dict[str, Any]:
+    """
+    Layer 2: confidence /treshold rules. Non-negotiable — evalautes the 
+    retrievel confidence from knowledge base.
+    """
+    if top_similarity is None or threshold is None:
+        raise ValueError(f"similarity or threshold is blank")
+    if top_similarity < threshold:
+        reason = f"blocked: confidence is {top_similarity} and threshold is {threshold}"
+        resolve = "blocked"
+    else:
+        reason = f"confidence: {top_similarity} and treshold : {threshold} did not trigger a Layer 2 block"
+        resolve = "continue"
         
+    return {
+        "resolve": resolve,
+        "reason" : reason
+            }
+       
+def check_layer_3_self_reported_tiebreaker(self_reported_confidence: str) -> dict[str, Any]:
+    """
+    Layer 3: model reported confidence rules. Non-negotiable — evalautes the 
+    retrievel confidence from the model.
+    """
+    
+
+    if self_reported_confidence not in VALID_CONFIDENCE_LEVELS:
+        raise ValueError(f"invalid self_reported_confidence: '{self_reported_confidence}'")
+    if self_reported_confidence == "low":
+        reason = f"blocked: model confidence is {self_reported_confidence}"
+        resolve = "blocked"
+    else:
+        reason = f"model confidence: {self_reported_confidence}"
+        resolve = "continue"
+                
+    return {
+            "resolve": resolve,
+            "reason" : reason
+            }
+
+def propose_resolution(
+    proposed_answer: str, self_reported_confidence: str,category: str,
+    urgency: str,top_similarity: float) -> dict[str, Any]:
+    
+    layer1_check = check_layer_1_hard_rules(category,urgency)
+    if layer1_check["resolve"] == "blocked":
+        return {"status":"blocked" , "proposed_answer":proposed_answer , "layer_1":layer1_check , "layer_2":"None" , "layer_3":"None"}
+    layer2_check = check_layer_2_retrieval_confidence(top_similarity,SIMILARITY_THRESHOLD)
+    if layer2_check["resolve"] == "blocked":
+        return {"status":"blocked" , "proposed_answer":proposed_answer, "layer_1":layer1_check , "layer_2":layer2_check , "layer_3":"None"}
+    layer3_check = check_layer_3_self_reported_tiebreaker(self_reported_confidence)
+    if layer3_check["resolve"] == "blocked":
+        return {"status":"blocked" , "proposed_answer":proposed_answer ,"layer_1":layer1_check , "layer_2":layer2_check , "layer_3":layer3_check}
+    return {"status":"passed" , "proposed_answer":proposed_answer, "layer_1":layer1_check , "layer_2":layer2_check , "layer_3":layer3_check}
+
+propose_resolution_schema = {
+    "name": "propose_resolution",
+    "description": '''Propose a resolution to the case, with your confidence in it. This does not resolve the case directly 
+                    — it triggers a verification check that may block the resolution.''',
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "proposed_answer": {
+                "type": "string",
+                "description": "The draft answer you propose sending to resolve the case."
+            },
+            "self_reported_confidence": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high"],
+                            "description": "How confident you are in this proposed answer."
+                        },
+           },
+        "required": ["proposed_answer","self_reported_confidence"]
+    }
+}
