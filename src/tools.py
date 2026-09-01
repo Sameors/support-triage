@@ -134,16 +134,6 @@ KNOWLEDGE_BASE_COLLECTION = "support_kb"  # the one fixed collection name, decid
 def search_knowledge_base(query: str, model, chroma_client, anthropic_client) -> dict[str, Any]:
     """
     Query the shared support knowledge base and generate an answer.
-
-    'query' is the only parameter the MODEL decides — it's what appears in
-    the tool schema. 'model', 'chroma_client', 'anthropic_client' are
-    infrastructure your own code supplies; they never appear in the tool
-    schema, since the LLM has no concept of them.
-
-    Reuses query_chunks() and generate_answer() from the Document Q&A
-    pipeline directly — does NOT call answer_question(), since that
-    function's ingestion logic doesn't apply here (the KB is a static,
-    pre-ingested collection, not a per-request upload).
     """
     matched_chunks = query_chunks(query,model,chroma_client,KNOWLEDGE_BASE_COLLECTION, n_results=5 )
     top_similarity = 1 - matched_chunks[0]["distance"]

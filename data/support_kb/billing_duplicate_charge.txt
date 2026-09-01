@@ -1,0 +1,12 @@
+Title: Resolving Duplicate Charges on an Invoice
+
+If a customer reports being charged twice for the same invoice, first confirm
+the duplicate by checking the payment processor logs for two transactions
+with matching invoice numbers and amounts within a short time window.
+
+Common causes: a retried failed payment that actually succeeded both times,
+a browser double-submit on the checkout page, or a manual re-entry by support
+staff. Once confirmed, refund the duplicate transaction (not the original)
+within 3-5 business days. Notify the customer with the refund confirmation
+and expected timeline. If the duplicate cannot be confirmed from logs alone,
+escalate to the billing team for manual transaction reconciliation.

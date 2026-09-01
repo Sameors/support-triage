@@ -5,4 +5,4 @@ pytest
 python-dotenv
 chromadb
 sentence-transformers
-anthropic
+anthropic==0.121.0

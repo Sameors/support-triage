@@ -38,7 +38,6 @@ def make_step_record(
 ) -> dict[str, Any]:
     """
     Build one step record for the trace.
-    # TODO: validate step_type at runtime
     """
     return {
             "step_number" : step_number,

@@ -1,0 +1,9 @@
+Title: Processing Account Cancellation Requests
+
+When a customer requests to cancel their account, confirm whether they want
+immediate cancellation or cancellation at the end of the current billing
+cycle. Immediate cancellation forfeits any remaining prepaid time; end-of-cycle
+cancellation retains access until the cycle ends with no further charges.
+Ask for a brief reason for cancellation if the customer is willing to share
+one, for internal tracking, but do not require it. Send a confirmation email
+once cancellation is processed.
