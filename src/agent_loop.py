@@ -96,7 +96,13 @@ def build_system_prompt() -> str:
                 Always call classify_case as a first tool to determine the category and urgency of the support case. 
                 Based on the models response suggestion evaluate next best matched tool from those available 
                 and continue evaluating untill a final decision [resolving, routing, or escalating] is obtained . 
-                When in doubt,escalating a case is a acceptable choice. """ 
+                Always attempt propose_resolution for every case before calling 
+                route_to_queue or escalate, unless the retrieved knowledge base content explicitly states the 
+                issue cannot be resolved through this system.
+
+                Do not route or escalate directly based on your own judgment that a case 
+                "requires specialized support" or "needs human verification" — let 
+                propose_resolution's confidence layers make that determination instead."""
 # ---------------------------------------------------------------------------
 # Tool execution — the dict lookup + selective tracked_state merging you
 # already reasoned through. Implement it here.
@@ -204,7 +210,6 @@ def run_agent_on_case(case: dict[str, Any], infrastructure: dict[str, Any]) -> d
     tracked_state = {}
     tool_call_history = []
     messages=[{"role": "user", "content":case["text"]}]
-  
     system_prompt_string=build_system_prompt()
     iteration = 0
     while True:
@@ -233,66 +238,73 @@ def run_agent_on_case(case: dict[str, Any], infrastructure: dict[str, Any]) -> d
             continue
 
         else:
-            tool_block = tool_use_blocks[0]
+            case_terminated = False
+            final_result = None
+            tool_results_this_turn = []
+            for i, tool_block in enumerate(tool_use_blocks):
+                classify_case_done = "category" in tracked_state
+                if not classify_case_done and tool_block.name != "classify_case":
+                    messages.append({"role": "user", "content": "You must call classify_case before any other tool."})
+                    trace.add_step(make_step_record(step_number=iteration, step_type="correction", name=tool_block.name, details={"reason": "wrong_tool", "expected": "classify_case"}))
+                    continue
+                try:
+                    tool_output = execute_tool(tool_block.name, tool_block.input, tracked_state, infrastructure)
+                    trace.add_step(make_step_record(step_number=iteration, step_type="tool_call", name=tool_block.name, details=tool_output))
+                    # messages.append({
+                    #                     "role": "user",
+                    #                         "content": [{"type": "tool_result", "tool_use_id": tool_block.id, "content": str(tool_output)}]
+                    #                 })
+                    tool_results_this_turn.append({"type": "tool_result", "tool_use_id": tool_block.id, 
+                                                   "content": str(tool_output)})
 
-            if not classify_case_done and tool_block.name != "classify_case":
-                messages.append({"role": "user", "content": "You must call classify_case before any other tool."})
-                continue
+                    if is_final_step(tool_block.name, tool_output):
+                                        trace.set_final_action(FINAL_ACTION_MAP[tool_block.name])
+                                        final_result = {
+                                            "case_id": case["id"],
+                                            "final_action": FINAL_ACTION_MAP[tool_block.name],
+                                            "trace": trace.to_dict(),
+                                            }
+                                        case_terminated = True
+                                        break
+            
+                except (UnknownToolError, ToolSequenceError) as e:
+                    print(f"Iteration {iteration}: fatal tool error — {type(e).__name__}: {e}")
+                    final_result = {
+                    "case_id": case["id"],
+                    "final_action": "error",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "trace": trace.to_dict() }
+                    tool_results_this_turn.append({"type": "tool_result", "tool_use_id": tool_block.id, "content": 
+                                                    f"Error: {e}"})
+                    trace.add_step(make_step_record(step_number=iteration, step_type="error", name=tool_block.name, 
+                                                    details={"error_type": type(e).__name__, "error_message": str(e), 
+                                                             "tracked_state": tracked_state}))
 
-            try:
-                tool_output = execute_tool(tool_block.name, tool_block.input, tracked_state, infrastructure)
-                messages.append({
-                    "role": "user",
-                        "content": [{"type": "tool_result", "tool_use_id": tool_block.id, "content": str(tool_output)}]
-                })
-                if is_final_step(tool_block.name, tool_output):
-                    trace.set_final_action(FINAL_ACTION_MAP[tool_block.name])
-                    return {
-                        "case_id": case["id"],
-                        "final_action": FINAL_ACTION_MAP[tool_block.name],
-                        "trace": trace.to_dict(),
-                        }
-            except (UnknownToolError, ToolSequenceError) as e:
-                print(f"Iteration {iteration}: fatal tool error — {type(e).__name__}: {e}")
-                return {
-                "case_id": case["id"],
-                "final_action": "error",
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-                "trace": trace.to_dict(),
-            }
+                    case_terminated = True
+                    break
             
-            except KeyError as e:
-        # Known cause right now: infrastructure missing chroma_client/model
-        # Distinct from the two named  errors above — this is a missing-dependency failure, not a
-        # sequencing or unknown-tool failure.
-                print(f"Iteration {iteration}: missing infrastructure key — {e}")
-                return {
-                "case_id": case["id"],
-                "final_action": "error",
-                "error_type": "MissingInfrastructureKey",
-                "error_message": str(e),
-                "trace": trace.to_dict(),
-        }
-            continue
-        # if iteration == 1:
-        #     # STUB: only checks iteration 1, only checks "model called it" not "tool executed successfully" — real fix in Step 3 once execute_tool (Step 2) exists.
-        #     c alled_classify_case_correctly = (
-        #                                 response.stop_reason == "tool_use"
-        #                                 and any(b.name == "classify_case" for b in tool_use_blocks))
-        #     if called_classify_case_correctly:
-        #         classify_block = next(b for b in tool_use_blocks if b.name == "classify_case")
-        #         tool_output = classify_case(**classify_block.input)
-        #         messages.append({
-        #                         "role": "user",
-        #                         "content": [{"type": "tool_result", "tool_use_id": classify_block.id, "content": str(tool_output)}]
-        #                         })
-        #         #print(f"iteration {iteration}: response.content = {response.content}")
-        #         continue
+                except KeyError as e:
+                    final_result = {
+                                    "case_id": case["id"],
+                                    "final_action": "error",
+                                    "error_type": "MissingInfrastructureKey",
+                                    "error_message": str(e),
+                                    "trace": trace.to_dict() }
+                    tool_results_this_turn.append({"type": "tool_result", "tool_use_id": tool_block.id, "content": 
+                                                                        f"Error: {e}"})
+                    trace.add_step(make_step_record(step_number=iteration, step_type="error", name=tool_block.name, 
+                                                                        details={"error_type": type(e).__name__, "error_message": str(e), 
+                                                                                 "tracked_state": tracked_state}))
+                    
+                    case_terminated = True
+                    break
+            for skipped_block in tool_use_blocks[i+1:]:
+                tool_results_this_turn.append({"type": "tool_result", "tool_use_id": skipped_block.id, "content": "Not executed — case already concluded."})
+            messages.append({"role": "user", "content": tool_results_this_turn})
+            if case_terminated:
+                return final_result 
+
+        
             
-            
-        #     if not called_classify_case_correctly:
-        #         messages.append({"role": "user", "content": "You must call classify_case as your first action. Please try again."})
-        #         print(f"iteration {iteration}: response.content = {response.content}")
-        #         continue                
         
