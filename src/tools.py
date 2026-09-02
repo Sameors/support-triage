@@ -29,7 +29,7 @@ VALID_CATEGORIES = {"billing", "legal", "refund", "technical", "account", "gener
 VALID_URGENCIES = {"low", "medium", "high", "critical"}
 VALID_QUEUE = {"billing", "technical", "account", "general"}
 VALID_CONFIDENCE_LEVELS = {"low", "medium", "high"}
-SIMILARITY_THRESHOLD = 0.5
+SIMILARITY_THRESHOLD = 0.25
 
 def classify_case(category: str, urgency: str) -> dict[str, Any]:
     """
@@ -135,14 +135,14 @@ def search_knowledge_base(query: str, model, chroma_client, anthropic_client) ->
     """
     Query the shared support knowledge base and generate an answer.
     """
-    matched_chunks = query_chunks(query,model,chroma_client,KNOWLEDGE_BASE_COLLECTION, n_results=5 )
+    matched_chunks = query_chunks(query,model,chroma_client,KNOWLEDGE_BASE_COLLECTION, n_results=1 )
     top_similarity = 1 - matched_chunks[0]["distance"]
     chunks_used = [chunk["chunk_text"] for chunk in matched_chunks]
     answer = generate_answer(query, matched_chunks, anthropic_client)
     return {
         "answer": answer, 
         "top_similarity": top_similarity, 
-        "chunks_used": chunks_used       
+        "chunks_used": chunks_used
     }
     
 search_knowledge_base_schema = {
