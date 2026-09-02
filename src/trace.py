@@ -17,10 +17,6 @@ Two kinds of step exist:
                     Pass 2 evaluation (DESIGN.md §9) verify a decision was reached
                     through the correct mechanism, not just the correct outcome.
 
-YOU decide: dataclass vs. TypedDict vs. plain dict. Whatever you pick, every
-function elsewhere in this project that writes to the trace should use this
-shape consistently — decide it here once, don't let each tool invent its own
-record format.
 """
 
 from typing import Any, Literal
@@ -32,7 +28,7 @@ from typing import Any, Literal
 
 def make_step_record(
     step_number: int,
-    step_type: Literal["tool_call", "rule_check"],
+    step_type: Literal["tool_call","correction","error"],
     name: str,
     details: dict[str, Any]
 ) -> dict[str, Any]:
