@@ -244,7 +244,7 @@ def run_agent_on_case(case: dict[str, Any], infrastructure: dict[str, Any]) -> d
         messages.append({"role": "assistant", "content": response.content})
         tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
         #print(f"iteration {iteration}: response.content = {response.content}")
-        print(f"iteration {iteration}: stop_reason={response.stop_reason}, tools_called={[b.name for b in tool_use_blocks]}")
+        print(f"case : {case["id"]} —  iteration {iteration}: stop_reason={response.stop_reason}, tools_called={[b.name for b in tool_use_blocks]}")
         classify_case_done = "category" in tracked_state
 
         if not tool_use_blocks:
@@ -271,6 +271,7 @@ def run_agent_on_case(case: dict[str, Any], infrastructure: dict[str, Any]) -> d
                                     f"inputs. Prior result: {duplicate['result']}. "
                                     f"Do not retry this tool. Call `escalate` now."
                                     )
+                    trace.add_step(make_step_record(step_number=iteration, step_type="duplicate_call", name=tool_block.name, details=duplicate_msg))
                     tool_results_this_turn.append({"type": "tool_result", "tool_use_id": tool_block.id, "content": duplicate_msg})
                     break
                 try:
