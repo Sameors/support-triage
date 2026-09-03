@@ -28,7 +28,7 @@ from typing import Any, Literal
 
 def make_step_record(
     step_number: int,
-    step_type: Literal["tool_call","correction","error"],
+    step_type: Literal["tool_call","correction","error","timeout_escalate"],
     name: str,
     details: dict[str, Any]
 ) -> dict[str, Any]:

@@ -138,9 +138,9 @@ def search_knowledge_base(query: str, model, chroma_client, anthropic_client) ->
     matched_chunks = query_chunks(query,model,chroma_client,KNOWLEDGE_BASE_COLLECTION, n_results=1 )
     top_similarity = 1 - matched_chunks[0]["distance"]
     chunks_used = [chunk["chunk_text"] for chunk in matched_chunks]
-    answer = generate_answer(query, matched_chunks, anthropic_client)
+    #answer = generate_answer(query, matched_chunks, anthropic_client)
     return {
-        "answer": answer, 
+        #"answer": answer, 
         "top_similarity": top_similarity, 
         "chunks_used": chunks_used
     }
@@ -150,13 +150,8 @@ search_knowledge_base_schema = {
     "description": "Search the knowledge base for information relevant to the case and generate a candidate answer.",
     "input_schema": {
         "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": "The question that needs to be answered."
-            },
-           },
-        "required": ["query"]
+        "properties": {},
+        "required": []
     }
 }
 
@@ -231,10 +226,10 @@ def propose_resolution(
     
     layer1_check = check_layer_1_hard_rules(category,urgency)
     if layer1_check["resolve"] == "blocked":
-        return {"status":"blocked" , "proposed_answer":proposed_answer , "layer_1":layer1_check , "layer_2":"None" , "layer_3":"None"}
+        return {"status":"blocked" , "proposed_answer":proposed_answer , "layer_1":layer1_check , "layer_2":None , "layer_3":None}
     layer2_check = check_layer_2_retrieval_confidence(top_similarity,SIMILARITY_THRESHOLD)
     if layer2_check["resolve"] == "blocked":
-        return {"status":"blocked" , "proposed_answer":proposed_answer, "layer_1":layer1_check , "layer_2":layer2_check , "layer_3":"None"}
+        return {"status":"blocked" , "proposed_answer":proposed_answer, "layer_1":layer1_check , "layer_2":layer2_check , "layer_3":None}
     layer3_check = check_layer_3_self_reported_tiebreaker(self_reported_confidence)
     if layer3_check["resolve"] == "blocked":
         return {"status":"blocked" , "proposed_answer":proposed_answer ,"layer_1":layer1_check , "layer_2":layer2_check , "layer_3":layer3_check}

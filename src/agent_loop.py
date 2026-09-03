@@ -68,20 +68,22 @@ ALL_TOOL_SCHEMAS = [classify_case_schema, route_to_queue_schema, escalate_schema
 # ---------------------------------------------------------------------------
  
 MAX_ITERATIONS = 5  # placeholder, per DESIGN.md §4 — tune later
- 
-def check_repeat_call_guard(tool_call_history: list[str], proposed_tool_name: str) -> bool:
+
+
+# ---------------------------------------------------------------------------
+# Guard the duplicate tool calls in single iteration or cross iteration model calls.
+# ---------------------------------------------------------------------------
+def check_repeat_call_guard(tool_call_history: list[dict], tool_name: str, tool_input: dict) -> dict | None:
     """
-    DESIGN.md §4: "same tool + same input called twice in a row -> treat as
-    stuck, force escalate. 
-    Returns True if the guard should fire (i.e., stop the loop and force
-    escalate), False otherwise.
+    Checks tool_call_history for a prior entry with the same tool_name + tool_input.
+    Returns the matching history entry (dict with at least 'result') if found, else None.
+    Read-only — does not mutate tool_call_history. Caller owns appending.
     """
-    if not tool_call_history:
-        return False
-    if tool_call_history[-1] == proposed_tool_name:
-        return True
-    else:
-        return False
+    for entry in tool_call_history:
+        if entry["tool_name"] == tool_name and entry["tool_input"] == tool_input:
+            return entry
+    return None
+   
 # ---------------------------------------------------------------------------
 # The system prompt — establishes the mandatory classify_case-first rule,
 # per DESIGN.md §3 and the "resent every single turn" mechanic you already
@@ -102,7 +104,17 @@ def build_system_prompt() -> str:
 
                 Do not route or escalate directly based on your own judgment that a case 
                 "requires specialized support" or "needs human verification" — let 
-                propose_resolution's confidence layers make that determination instead."""
+                propose_resolution's confidence layers make that determination instead.
+                Once propose_resolution returns a blocked status, choose between 
+                route_to_queue and escalate based on the nature of the case:
+
+                Call escalate if the ticket describes more than one distinct issue, or 
+                does not fit cleanly into a single category — re-read the original 
+                ticket text to check for this, not just the classified category.
+
+                Call route_to_queue if the ticket is a single, clearly categorized 
+                issue that a human simply needs to execute or verify, even if it 
+                couldn't be auto-resolved."""
 # ---------------------------------------------------------------------------
 # Tool execution — the dict lookup + selective tracked_state merging you
 # already reasoned through. Implement it here.
@@ -113,6 +125,7 @@ def execute_tool(
     tool_input: dict[str, Any],
     tracked_state: dict[str, Any],
     infrastructure: dict[str, Any],
+    case: dict[str, Any],
 ) -> dict[str, Any]:
     """
     Looks up the right function via TOOL_FUNCTIONS, merges tool_input with
@@ -124,7 +137,7 @@ def execute_tool(
         raise UnknownToolError(f"tool_name cannot be found. tool_name: {tool_name}")
 
     func = TOOL_FUNCTIONS[tool_name]
-    extra_args = TOOL_EXTRA_ARGS_BUILDERS[tool_name](tracked_state, infrastructure)
+    extra_args = TOOL_EXTRA_ARGS_BUILDERS[tool_name](tracked_state, infrastructure ,case)
     result = func(**tool_input, **extra_args)
     update_tracked_state(tracked_state, tool_name, result)
     return result
@@ -152,18 +165,18 @@ def update_tracked_state(tracked_state: dict[str, Any], tool_name: str, tool_res
 # stand alone functions for extra_args
 # ---------------------------------------------------------------------------
 
-def _no_extra_args(tracked_state, infrastructure):
+def _no_extra_args(tracked_state, infrastructure,case):
     return {}
 
-def _search_kb_extra_args(tracked_state, infrastructure):
+def _search_kb_extra_args(tracked_state, infrastructure, case):
     return {
         "model": infrastructure["model"],
         "chroma_client": infrastructure["chroma_client"],
         "anthropic_client": infrastructure["anthropic_client"],
+        "query" : case["text"]
     }
 
-
-def _propose_resolution_extra_args(tracked_state, infrastructure):
+def _propose_resolution_extra_args(tracked_state, infrastructure,case):
     required_keys = {"category", "urgency", "top_similarity"}
     missing = required_keys - tracked_state.keys()
     if missing:
@@ -216,7 +229,11 @@ def run_agent_on_case(case: dict[str, Any], infrastructure: dict[str, Any]) -> d
         iteration += 1
         if iteration > MAX_ITERATIONS:
             print(f"Exceeded max iterations ({MAX_ITERATIONS}), forcing escalate")
-            break
+            trace.add_step(make_step_record(step_number=iteration, step_type="timeout_escalate", 
+                                            name="iteration_cap", details={"reason": "max iterations passed"}))
+            trace.set_final_action("timeout_escalate")
+            final_result = {"case_id": case["id"], "final_action":"timeout_escalate","trace": trace.to_dict() }
+            return final_result
         response = infrastructure["anthropic_client"].messages.create(
                                 model=infrastructure["claude_model_name"],
                                 max_tokens=1024,
@@ -247,15 +264,22 @@ def run_agent_on_case(case: dict[str, Any], infrastructure: dict[str, Any]) -> d
                     messages.append({"role": "user", "content": "You must call classify_case before any other tool."})
                     trace.add_step(make_step_record(step_number=iteration, step_type="correction", name=tool_block.name, details={"reason": "wrong_tool", "expected": "classify_case"}))
                     continue
+                duplicate = check_repeat_call_guard(tool_call_history, tool_block.name, tool_block.input)
+                if duplicate is not None:
+                    duplicate_msg = (
+                                    f"Duplicate call detected: {tool_block.name} already called with identical "
+                                    f"inputs. Prior result: {duplicate['result']}. "
+                                    f"Do not retry this tool. Call `escalate` now."
+                                    )
+                    tool_results_this_turn.append({"type": "tool_result", "tool_use_id": tool_block.id, "content": duplicate_msg})
+                    break
                 try:
-                    tool_output = execute_tool(tool_block.name, tool_block.input, tracked_state, infrastructure)
+                    tool_output = execute_tool(tool_block.name, tool_block.input, tracked_state, infrastructure,case)
                     trace.add_step(make_step_record(step_number=iteration, step_type="tool_call", name=tool_block.name, details=tool_output))
-                    # messages.append({
-                    #                     "role": "user",
-                    #                         "content": [{"type": "tool_result", "tool_use_id": tool_block.id, "content": str(tool_output)}]
-                    #                 })
+                    tool_call_history.append({"tool_name": tool_block.name, "tool_input": tool_block.input, "result": tool_output})
                     tool_results_this_turn.append({"type": "tool_result", "tool_use_id": tool_block.id, 
                                                    "content": str(tool_output)})
+                    
 
                     if is_final_step(tool_block.name, tool_output):
                                         trace.set_final_action(FINAL_ACTION_MAP[tool_block.name])
@@ -299,11 +323,13 @@ def run_agent_on_case(case: dict[str, Any], infrastructure: dict[str, Any]) -> d
                     
                     case_terminated = True
                     break
+            skip_reason = "case already concluded" if case_terminated else "duplicate call detected this turn — awaiting escalation"
             for skipped_block in tool_use_blocks[i+1:]:
-                tool_results_this_turn.append({"type": "tool_result", "tool_use_id": skipped_block.id, "content": "Not executed — case already concluded."})
+                tool_results_this_turn.append({"type": "tool_result", "tool_use_id": skipped_block.id, "content": f"Not executed — {skip_reason}."})
             messages.append({"role": "user", "content": tool_results_this_turn})
+            
             if case_terminated:
-                return final_result 
+                return final_result
 
         
             
