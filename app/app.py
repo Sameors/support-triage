@@ -9,7 +9,7 @@ from data.evals.checks import check_pass_1, check_pass_2
 
 
 
-dataset_path = Path(__file__).parent.parent.parent / "data" / "evals" / "eval_dataset.json"
+dataset_path = Path(__file__).parent.parent / "data" / "evals" / "eval_dataset.json"
 
 if "combined_results" not in st.session_state:
     st.session_state.combined_results = None

@@ -29,7 +29,7 @@ from src.tools import (
     classify_case_schema, route_to_queue_schema, escalate_schema,
     search_knowledge_base_schema, propose_resolution_schema
 )
-from src.embedding import load_model
+from src.retrieval import load_model
 # ---------------------------------------------------------------------------
 # exception handlers.
 # ---------------------------------------------------------------------------

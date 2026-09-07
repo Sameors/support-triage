@@ -15,15 +15,15 @@ from dotenv import load_dotenv
 
 load_dotenv()  # reads .env file, sets values as environment variables
 
-DOCUMENT_QA_APP_SRC = os.environ.get("DOCUMENT_QA_APP_SRC")
-if DOCUMENT_QA_APP_SRC is None:
-    raise ValueError(f"Document QA application path not found")
+# DOCUMENT_QA_APP_SRC = os.environ.get("DOCUMENT_QA_APP_SRC")
+# if DOCUMENT_QA_APP_SRC is None:
+#     raise ValueError(f"Document QA application path not found")
 
-if DOCUMENT_QA_APP_SRC:
-    sys.path.append(DOCUMENT_QA_APP_SRC)
+# if DOCUMENT_QA_APP_SRC:
+#     sys.path.append(DOCUMENT_QA_APP_SRC)
 
 from src.retrieval import query_chunks
-from src.generation import generate_answer
+#from src.generation import generate_answer
 
 VALID_CATEGORIES = {"billing", "legal", "refund", "technical", "account", "general"}
 VALID_URGENCIES = {"low", "medium", "high", "critical"}
