@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from pathlib import Path
 from src.agent_loop import run_agent_on_case, infrastructure
 from data.evals.checks import check_pass_1, check_pass_2
