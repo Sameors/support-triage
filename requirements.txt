@@ -6,3 +6,4 @@ python-dotenv
 chromadb
 sentence-transformers
 anthropic==0.121.0
+streamlit
