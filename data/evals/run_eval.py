@@ -17,4 +17,5 @@ for case in dataset:
         "pass_1": p1,
         "pass_2": p2,
     })
+print(f"===========Tool invocation================")
 print_eval_table(combined_results)
