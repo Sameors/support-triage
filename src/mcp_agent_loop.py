@@ -13,7 +13,12 @@ from src.agent_loop import build_system_prompt as build_base_system_prompt , che
 def build_system_prompt_mcp() -> str:
     return build_base_system_prompt() + """
         After classify_case returns a case_handle, include that exact case_handle value
-        as an argument in every subsequent tool call for this same case."""
+        as an argument in every subsequent tool call for this same case.
+        If propose_resolution returns status: blocked with layer_1.resolve == 'blocked' and category == 'billing', 
+        check the ticket for an order_id in its metadata. If a real order_id is present, call invoke_specialist with it before calling escalate. 
+        If invoke_specialist returns a resolved decision, use that as the final action instead of escalating. 
+        If it returns anything else (pending, error, or no order_id was found), fall back to escalate as usual.
+        """
 
 # async def run_agent_on_case_mcp(case: dict[str, Any], anthropic_client, claude_model_name: str) -> dict[str, Any]:
 #     server_params = StdioServerParameters(
@@ -28,7 +33,7 @@ async def run_agent_on_case_mcp(case: dict[str, Any], client, anthropic_client, 
     trace = CaseTrace(case_id=case["id"])
     case_handle = None
     tool_call_history = []
-    messages = [{"role": "user", "content": case["text"]}]
+    messages = [{"role": "user", "content": f"{case['text']}\n\n[Ticket metadata: order_id={case.get('order_id', 'unknown')}]"}]
     system_prompt_string = build_system_prompt_mcp()
     iteration = 0
     while True:
@@ -93,8 +98,8 @@ async def run_agent_on_case_mcp(case: dict[str, Any], client, anthropic_client, 
                 else:
                     result_data = tool_result.structured_content
                     if tool_block.name == "classify_case":
-                        case_handle = tool_result.structured_content["case_handle"]  # pull it out of result_data — what key?
-                    trace.add_step(make_step_record(step_number=iteration, step_type="tool_call", name=tool_block.name, details=result_data))
+                        case_handle = tool_result.structured_content["case_handle"] 
+                    trace.add_step(make_step_record(step_number=iteration, step_type="tool_call", name=tool_block.name, details=result_data,tool_input=tool_block.input))
                     tool_call_history.append({"tool_name": tool_block.name, "tool_input": tool_block.input, "result": result_data})
                     tool_results_this_turn.append({"type": "tool_result", "tool_use_id": tool_block.id, "content": str(result_data)})
 
@@ -120,6 +125,7 @@ if __name__ == "__main__":
 
     case = {
         "id": "test-1",
+        "order_id": "A1123",
         "text": "I was charged twice for invoice #7734 — same amount, same date, two separate charges on my card statement. Can you refund the duplicate?",
         "customer_tier": "pro",
         "previous_ticket_count": 0,

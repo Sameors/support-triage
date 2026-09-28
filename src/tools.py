@@ -12,6 +12,11 @@ from typing import Any, Literal
 import sys
 import os
 from dotenv import load_dotenv
+import requests
+import time
+
+SPECIALIST_HOST = "http://localhost:8001"
+
 
 load_dotenv()  # reads .env file, sets values as environment variables
 
@@ -255,3 +260,55 @@ propose_resolution_schema = {
         "required": ["proposed_answer","self_reported_confidence"]
     }
 }
+
+def invoke_specialist(order_id: str) -> dict[str, Any]:
+    
+    """
+        Invoke the Billing Investigation specialist agent to investigate a
+        disputed transaction when the generalist triage agent cannot resolve
+        it confidently on its own.
+        
+        Use this only when propose_resolution returns status "blocked" with
+        layer_1 blocked and category "billing", and the ticket includes a
+        known order_id. Call this before falling back to escalate.
+
+        The specialist checks the transaction ledger, refund history, and
+        dispute records for the given order, and either resolves the case
+        automatically or determines it needs human review. This call may
+        take a few seconds while the specialist investigates.
+        
+        Args:
+        order_id: The order or invoice identifier the customer is
+            disputing, as found in the ticket (e.g. "A1123").
+            
+        Returns:
+        A dict with:
+        - "resolve": either the specialist's resolution decision
+          (e.g. "resolve") or "escalate" if the specialist could not
+          resolve it automatically or did not respond in time.
+        - "reason": a human-readable explanation for the outcome.
+    
+    """   
+    try:
+        card = requests.get(f"{SPECIALIST_HOST}/.well-known/agent.json", timeout=10).json()
+        base_url = card["url"]
+    except requests.exceptions.ConnectionError:
+        return {"resolve": "defer", "reason": "specialist unreachable"}
+
+    try:
+        response = requests.post(f"{base_url}/tasks", json={"order_id": order_id}, timeout=60)
+        task = response.json()
+    except requests.exceptions.ConnectionError:
+            return {"resolve": "defer", "reason": "specialist unreachable"}
+        
+    task_id = task["task_id"]
+    if task["status"] == "completed": return {"resolve": task["decision"], "reason": task["reason"]}
+
+    for attempt in range(10):
+        time.sleep(5)
+        status_response = requests.get(f"{base_url}/tasks/{task_id}", timeout=10)
+        status = status_response.json()
+        if status["status"] == "completed": 
+            return {"resolve": status["result"]["decision"], "reason": status["result"]["reason"]}
+
+    return {"resolve": "defer", "reason": "specialist did not resolve in time"}

@@ -30,7 +30,8 @@ def make_step_record(
     step_number: int,
     step_type: Literal["tool_call","correction","error","timeout_escalate","duplicate_call"],
     name: str,
-    details: dict[str, Any]
+    details: dict[str, Any],
+    tool_input:dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """
     Build one step record for the trace.
@@ -39,7 +40,8 @@ def make_step_record(
             "step_number" : step_number,
             "step_type" : step_type,
             "name" : name,
-            "details" :details     
+            "details" :details,  
+            "tool_input" : tool_input
     }
 
 

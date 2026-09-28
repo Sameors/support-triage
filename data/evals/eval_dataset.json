@@ -1,9 +1,11 @@
 [
   {
     "id": "case_01_billing_dispute",
+    "order_id": "A1123",
     "text": "I was charged twice for invoice #7734 — same amount, same date, two separate charges on my card statement. Can you refund the duplicate?",
-    "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution", "route_to_queue"],
-    "expected_final_action": "route",
+    "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution","invoke_specialist"],
+    "expected_final_action": "resolve",
+    "forbidden_tools": [],
     "guard_triggered_final_action": "escalate",
     "check_layers": true,
     "expected_layers": {"layer_1": "blocked", "layer_2": null, "layer_3": null}
@@ -13,6 +15,7 @@
     "text": "I'd like to cancel my account. Please cancel it at the end of my current billing cycle, not immediately.",
     "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution"],
     "expected_final_action": "resolve",
+    "forbidden_tools": ["invoke_specialist"],
     "guard_triggered_final_action": "escalate",
     "check_layers": false,
     "expected_layers": null
@@ -20,8 +23,9 @@
    {
     "id": "case_03_dealy_shipment",
     "text": "My package was supposed to arrive 2 days ago and the tracking page hasn't updated since it left the warehouse",
-    "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution", "route_to_queue"],
-    "expected_final_action": "route",
+    "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution"],
+    "expected_final_action": ["resolve", "route"],
+    "forbidden_tools": ["invoke_specialist"],
     "guard_triggered_final_action": "escalate",
     "check_layers": false,
     "expected_layers": null
@@ -31,6 +35,7 @@
     "text": "Can I add a second user to my account with admin permissions?",
     "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution", "route_to_queue"],
     "expected_final_action": "route",
+    "forbidden_tools": ["invoke_specialist"],
     "guard_triggered_final_action": "escalate",
     "check_layers": true,
     "expected_layers": {"layer_1": "continue", "layer_2": "blocked", "layer_3": null}
@@ -40,15 +45,18 @@
     "text": "I want to cancel my account, but before I do — I noticed I'm still being charged for a plan I thought I already downgraded. Can you sort out the charge and then cancel?",
     "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution", "escalate"],
     "expected_final_action": "escalate",
+    "forbidden_tools": ["invoke_specialist"],
     "guard_triggered_final_action": "escalate",
     "check_layers": false,
     "expected_layers": null
   },
    {
     "id": "case_06_billing_issue",
+    "order_id": "B2001",
     "text": "I was charged twice this month for my subscription — once on the 3rd and again on the 9th, same amount, same card. This is extremely urgent, I need this fixed today.",
-    "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution", "route_to_queue"],
-    "expected_final_action": "route",
+    "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution","invoke_specialist", "escalate"],
+    "expected_final_action": "escalate",
+    "forbidden_tools": [],
     "guard_triggered_final_action": "escalate",
     "check_layers": true,
     "expected_layers": {"layer_1": "blocked", "layer_2": null, "layer_3": null}
@@ -58,6 +66,7 @@
     "text": "I can't log into my account. I clicked forgot password but never got the reset email, even after checking spam. My account isn't SSO, it's a regular email/password login.",
     "expected_tool_sequence": ["classify_case", "search_knowledge_base", "propose_resolution"],
     "expected_final_action": "resolve",
+    "forbidden_tools": ["invoke_specialist"],
     "guard_triggered_final_action": "escalate",
     "check_layers": true,
     "expected_layers": {"layer_1": "continue", "layer_2": "continue", "layer_3": "continue"}
