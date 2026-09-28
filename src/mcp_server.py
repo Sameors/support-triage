@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from uuid import uuid4
 
 
-from tools import classify_case , route_to_queue , escalate , search_knowledge_base , propose_resolution
+from tools import classify_case , route_to_queue , escalate , search_knowledge_base , propose_resolution , invoke_specialist
 from src.retrieval import load_model
 
 mcp = MCPServer("SupportTriage")
@@ -77,6 +77,14 @@ def propose_resolution_tool(proposed_answer: str, self_reported_confidence: Lite
         raise ToolError(f"invalid propose_resolution input: {e}")
     if result["status"] == "passed":
         case_state.pop(case_handle, None)
+    return result
+
+@mcp.tool(name="invoke_specialist")
+def invoke_specialist_adapter(order_id: str) -> dict[str, Any]:
+    try:
+        result = invoke_specialist(order_id)
+    except ValueError as e:
+        raise ToolError(f"invalid invoke_specialist invocation: {e}")    
     return result
     
 if __name__ == "__main__":

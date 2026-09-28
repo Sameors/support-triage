@@ -27,10 +27,14 @@ def check_pass_1(case: dict, result: dict) -> dict:
                 }
     else:
         expected_value = case["expected_final_action"]
+        if isinstance(expected_value, str):
+            expected_list = [expected_value]
+        else:
+            expected_list = expected_value
         actual_value = result["final_action"]
         return {
                 "case_id": case["id"],
-                "status": "pass" if actual_value == expected_value else "fail",
+                "status": "pass" if actual_value in expected_list else "fail",
                 "expected": expected_value,
                 "actual": actual_value,
                 "guard_fired": False,
@@ -45,11 +49,38 @@ def is_subsequence(expected: list, actual: list) -> bool:
             expected_idx += 1
     return expected_idx == len(expected)
 
-def check_pass_2(case: dict, result: dict) -> dict:
+def has_forbidden_tool(actual: list, forbidden: list) -> bool:
+    for item in actual:
+        if item in forbidden:
+            return True
+    return False
+
+def get_tool_input(steps: list, name: str):
+    for step in steps:
+        if step["name"] == name:
+            return step["tool_input"]
+    return None
     
+            
+def check_pass_2(case: dict, result: dict) -> dict:
+    reasons = []
+
     actual_sequence = [step["name"] for step in result["trace"]["steps"] if step["step_type"] == "tool_call"]
     is_subsequence_match = is_subsequence(case["expected_tool_sequence"],actual_sequence)
-    sequence_status = "pass" if is_subsequence_match else "fail"
+    forbidden_hit = has_forbidden_tool(actual_sequence, case.get("forbidden_tools", []))
+    
+    if not is_subsequence_match:
+        reasons.append("expected tool sequence not found")
+
+    if forbidden_hit:
+        reasons.append("forbidden tool called")
+
+    if "invoke_specialist" in case["expected_tool_sequence"]:
+        sent_input = get_tool_input(result["trace"]["steps"], "invoke_specialist")
+        if sent_input is None or sent_input.get("order_id")!= case["order_id"]:
+            reasons.append("wrong order_id sent to invoke_specialist")
+    
+    sequence_status = "pass" if len(reasons) == 0 else "fail"
     
     if case["check_layers"] is False:
         layer_check_applicable = False
@@ -70,7 +101,8 @@ def check_pass_2(case: dict, result: dict) -> dict:
     "expected_sequence": case["expected_tool_sequence"],
     "actual_sequence": actual_sequence,
     "layer_check_applicable" : layer_check_applicable,
-    "layer_status" : layer_status  
+    "layer_status" : layer_status,  
+    "reasons":"; ".join(reasons) if len(reasons) != 0 else "None"
     }
 
 def layer_matches(actual_layer, expected_value: str | None) -> bool:

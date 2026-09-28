@@ -1,7 +1,7 @@
 import json
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from data.evals.checks import check_pass_1 , check_pass_2 , print_eval_table
 from mcp import Client, StdioServerParameters
 from src.mcp_agent_loop import run_agent_on_case_mcp
@@ -9,6 +9,7 @@ import time
 import asyncio  
 import json
 import anthropic
+
 
 async def run_eval(dataset, anthropic_client, claude_model_name):
     server_params = StdioServerParameters(command="python", args=["src/mcp_server.py"])

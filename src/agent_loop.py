@@ -195,6 +195,7 @@ FINAL_ACTION_MAP = {
     "propose_resolution": "resolve",
     "route_to_queue": "route",
     "escalate": "escalate",
+    "invoke_specialist": "resolve"
 }
 # ---------------------------------------------------------------------------
 # check if its final step.
@@ -204,6 +205,8 @@ def is_final_step(tool_name: str, tool_result: dict) -> bool:
         return True
     if tool_name == "propose_resolution":
         return tool_result.get("status") == "passed"
+    if tool_name == "invoke_specialist":
+        return tool_result.get("resolve") == "resolve"
     return False
  
 # ---------------------------------------------------------------------------
@@ -243,7 +246,6 @@ def run_agent_on_case(case: dict[str, Any], infrastructure: dict[str, Any]) -> d
                                 )
         messages.append({"role": "assistant", "content": response.content})
         tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-        #print(f"iteration {iteration}: response.content = {response.content}")
         print(f"case : {case["id"]} —  iteration {iteration}: stop_reason={response.stop_reason}, tools_called={[b.name for b in tool_use_blocks]}")
         classify_case_done = "category" in tracked_state
 
